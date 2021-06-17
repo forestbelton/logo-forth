@@ -1,3 +1,7 @@
+* {
+  font-family: Monaco, Consolas, Inconsolata, "Courier New", Courier, monospace;
+}
+
 h1 {
   text-align: center;
 }
@@ -12,7 +16,6 @@ h1 {
 
 #command-list > li {
   display: inline-block;
-  font-family: Monaco, Consolas, Inconsolata, "Courier New", Courier, monospace;
   width: 25%;
 }
 

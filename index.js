@@ -101,33 +101,32 @@ const parse = (str) => {
   return tokens;
 };
 
+const T = (type, value) => ({ type, value });
+const B = (value) => T("block", value);
+const C = (value) => T("constant", value);
+const F = (value) => T("func", value);
+
 const parse_it = (raw_tokens, idx0, tokens) => {
   let idx = idx0;
   while (idx < raw_tokens.length) {
     const raw = raw_tokens[idx++];
-    if (typeof BUILTINS_DICT[raw] !== "undefined") {
-      tokens.push(BUILTINS_DICT[raw]);
-      continue;
-    } else if (raw === "[") {
+    if (raw === "[") {
       const block = [];
       idx = parse_it(raw_tokens, idx, block);
-      tokens.push(T("block", block));
+      tokens.push(B(block));
       continue;
     } else if (raw === "]") {
       break;
     }
-    tokens.push(T("constant", raw));
+    tokens.push(C(raw));
   }
   return idx;
 };
 
-const T = (type, value) => ({ type, value });
-const C = (value) => ({ type: "constant", value });
-
 const BUILTINS_DICT = {};
 const BUILTINS_DESC = {};
 const newBuiltin = (name, desc, defn) => {
-  BUILTINS_DICT[name] = typeof defn === "function" ? T("func", defn) : defn;
+  BUILTINS_DICT[name] = typeof defn === "function" ? F(defn) : defn;
   BUILTINS_DESC[name] = desc;
 };
 
@@ -214,9 +213,9 @@ newBuiltin("z", "zip <xs>, <ys>", (cpu) => {
   const list1 = cpu.pop().value;
   const items = [];
   for (let i = 0; i < Math.min(list1.length, list2.length); i++) {
-    items.push(T("block", [list1[i], list2[i]]));
+    items.push(B([list1[i], list2[i]]));
   }
-  cpu.push("block", items);
+  cpu.push(B(items));
 });
 
 newBuiltin("x", "expand <xs>", (cpu) => {
@@ -244,7 +243,7 @@ newBuiltin("i", "index <xs>, <i>", (cpu) => {
     try {
       const number = Math.floor(parseFloat(xs.value)).toString();
       const digitIndex = number.length - Math.floor(i) - 1;
-      value = T("constant", digitIndex >= 0 ? number.charAt(digitIndex) : "0");
+      value = C(digitIndex >= 0 ? number.charAt(digitIndex) : "0");
     } catch (e) {
       console.error(e);
       value = xs;
