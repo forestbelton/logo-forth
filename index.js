@@ -1,8 +1,9 @@
-const [canvas, input, commandList, execute] = [
+const [canvas, input, commandList, execute, share] = [
   "canvas",
   "input",
   "command-list",
   "execute",
+  "share",
 ].map((id) => document.getElementById(id));
 const ctx = canvas.getContext("2d");
 
@@ -166,19 +167,19 @@ newBuiltin("d", "pen down", (cpu) => (cpu.pen.down = true));
 
 newBuiltin("u", "pen up", (cpu) => (cpu.pen.up = true));
 
-newBuiltin("r", "rotate cw <x>", (cpu) => {
+newBuiltin("r", "rotate cw, <x>", (cpu) => {
   const r = cpu.popNumber();
   cpu.pen.dir += (2 * Math.PI * r) / 360;
   cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
 });
 
-newBuiltin("l", "rotate ccw <x>", (cpu) => {
+newBuiltin("l", "rotate ccw, <x>", (cpu) => {
   const r = cpu.popNumber();
   cpu.pen.dir -= (2 * Math.PI * r) / 360;
   cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
 });
 
-newBuiltin("c", "do-n <f> <n>", (cpu) => {
+newBuiltin("c", "do-n <f>, <n>", (cpu) => {
   const [block, count] = [cpu.pop(), cpu.popNumber()];
   console.log("do-n", count, block);
   for (let i = 0; i < count; i++) {
@@ -186,7 +187,7 @@ newBuiltin("c", "do-n <f> <n>", (cpu) => {
   }
 });
 
-newBuiltin("e", "each <f> <xs>", (cpu) => {
+newBuiltin("e", "each <f>, <xs>", (cpu) => {
   const [items, block] = [cpu.pop(), cpu.pop()];
   items.value.forEach((item) => {
     cpu.push(item);
@@ -194,7 +195,7 @@ newBuiltin("e", "each <f> <xs>", (cpu) => {
   });
 });
 
-newBuiltin("z", "zip <xs> <ys>", (cpu) => {
+newBuiltin("z", "zip <xs>, <ys>", (cpu) => {
   const list2 = cpu.pop().value;
   const list1 = cpu.pop().value;
   const items = [];
@@ -217,7 +218,7 @@ newBuiltin(".", "duplicate <x>", (cpu) => {
   cpu.push(x);
 });
 
-newBuiltin("!", "eval <f> <x>", (cpu) => {
+newBuiltin("!", "eval <f>, <x>", (cpu) => {
   const [x, f] = [cpu.pop(), cpu.pop()];
   cpu.push(x);
   if (f.type === "func") {
@@ -258,7 +259,7 @@ newBuiltin(":", "define <x>, <n>", (cpu) => {
   commandList.appendChild(li);
 });
 
-input.textContent = `d
+const DEFAULT_PRGM = `d
 90 l
 [ . 0 i 1 - 45 * r 1 i 20 * 50 + f ] F :
 [ 5 3 3 12 13 2 12 ] I :
@@ -266,8 +267,43 @@ F I e
 F 0 !
 F I e`;
 
+const params = new URLSearchParams(window.location.search);
+input.textContent =
+  (params.has("prgm") && atob(params.get("prgm"))) || DEFAULT_PRGM;
+
 execute.addEventListener("click", executeInput);
 execute.click();
+
+input.addEventListener("change", (ev) => {
+  input.textContent = ev.target.value;
+  const url = new URL(window.location);
+  url.searchParams.set("prgm", btoa(input.textContent));
+  window.history.pushState({}, "", url);
+});
+
+share.addEventListener("click", (ev) => {
+  const button = ev.target;
+
+  const url = new URL(window.location);
+  const oldPrgm =
+    (url.searchParams.has("prgm") && atob(url.searchParams.get("prgm"))) ||
+    null;
+
+  if (oldPrgm !== input.textContent) {
+    url.searchParams.set("prgm", btoa(input.textContent));
+    window.history.pushState({}, "", url);
+  }
+
+  navigator.clipboard.writeText(url.toString()).then(() => {
+    button.disabled = true;
+    button.textContent = "Copied to clipboard";
+
+    setTimeout(() => {
+      button.disabled = false;
+      button.textContent = "Share";
+    }, 2 * 1000);
+  });
+});
 
 input.setSelectionRange(
   input.textContent.length - 1,
