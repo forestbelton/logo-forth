@@ -18,7 +18,7 @@ const executeInput = () => {
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     cpu.evaluate(tokens);
     ctx.beginPath();
-    ctx.arc(cpu.pen.x, cpu.pen.y, 3, 0, 2 * Math.PI);
+    ctx.arc(cpu.x, cpu.y, 3, 0, 2 * Math.PI);
     ctx.fill();
   } catch (e) {
     console.error(e);
@@ -28,12 +28,10 @@ const executeInput = () => {
 
 class CPU {
   constructor() {
-    this.pen = {
-      x: CANVAS_WIDTH / 2,
-      y: CANVAS_WIDTH / 2,
-      dir: 0,
-      down: false,
-    };
+    this.x = Math.floor(CANVAS_WIDTH / 2);
+    this.y = Math.floor(CANVAS_HEIGHT / 2);
+    this.angle = 0;
+    this.down = false;
     this.stack = [];
     this.dict = {};
   }
@@ -98,7 +96,7 @@ const parse_it = (raw_tokens, idx0, tokens) => {
   while (idx < raw_tokens.length) {
     const raw = raw_tokens[idx++];
     if (typeof BUILTINS_DICT[raw] !== "undefined") {
-      tokens.push(T("func", BUILTINS_DICT[raw].code));
+      tokens.push(BUILTINS_DICT[raw]);
       continue;
     } else if (raw === "[") {
       const block = [];
@@ -114,74 +112,79 @@ const parse_it = (raw_tokens, idx0, tokens) => {
 };
 
 const T = (type, value) => ({ type, value });
+const C = (value) => ({ type: "constant", value });
 
 const BUILTINS_DICT = {};
-const newBuiltin = (name, desc, code) => {
-  BUILTINS_DICT[name] = { name, desc, code };
+const newBuiltin = (name, desc, defn) => {
+  const value = typeof defn === "function" ? T("func", defn) : defn;
+  BUILTINS_DICT[name] = { name, desc, value };
 };
 
 newBuiltin("*", "mul <x>, <y>", (cpu) => {
   const [a, b] = [cpu.popNumber(), cpu.popNumber()];
-  cpu.push("constant", a * b);
+  cpu.push(C(a * b));
 });
 
 newBuiltin("+", "sum <x>, <y>", (cpu) => {
   const [a, b] = [cpu.popNumber(), cpu.popNumber()];
-  cpu.push("constant", a + b);
+  cpu.push(C(a + b));
 });
 
 newBuiltin("-", "subtract <x>, <y>", (cpu) => {
   const [a, b] = [cpu.popNumber(), cpu.popNumber()];
-  cpu.push("constant", a - b);
+  cpu.push(C(a - b));
+});
+
+newBuiltin("a", "angle <x>", (cpu) => {
+  cpu.angle = cpu.popNumber();
 });
 
 newBuiltin("b", "back <x>", (cpu) => {
   const d = cpu.popNumber();
-  const { x, y } = cpu.pen;
-  cpu.pen.x = cpu.pen.x - Math.cos(cpu.pen.dir) * d;
-  cpu.pen.y = cpu.pen.y - Math.sin(cpu.pen.dir) * d;
-  if (!cpu.pen.down) {
+  const { x, y, angle } = cpu;
+  cpu.x = x - Math.cos(angle) * d;
+  cpu.y = y - Math.sin(angle) * d;
+  if (!cpu.down) {
     return;
   }
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(cpu.pen.x, cpu.pen.y);
+  ctx.lineTo(cpu.x, cpu.y);
   ctx.stroke();
 });
 
 newBuiltin("f", "forward <x>", (cpu) => {
   const d = cpu.popNumber();
-  const { x, y } = cpu.pen;
-  cpu.pen.x += Math.cos(cpu.pen.dir) * d;
-  cpu.pen.y += Math.sin(cpu.pen.dir) * d;
-  if (!cpu.pen.down) {
+  const { x, y, angle } = cpu;
+  cpu.x += Math.cos(angle) * d;
+  cpu.y += Math.sin(angle) * d;
+  if (!cpu.down) {
     return;
   }
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(cpu.pen.x, cpu.pen.y);
+  ctx.lineTo(cpu.x, cpu.y);
   ctx.stroke();
 });
 
-newBuiltin("d", "pen down", (cpu) => (cpu.pen.down = true));
+newBuiltin("d", "pen down", (cpu) => (cpu.down = true));
 
-newBuiltin("u", "pen up", (cpu) => (cpu.pen.up = true));
+newBuiltin("u", "pen up", (cpu) => (cpu.down = false));
 
 newBuiltin("r", "rotate cw, <x>", (cpu) => {
   const r = cpu.popNumber();
-  cpu.pen.dir += (2 * Math.PI * r) / 360;
-  cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
+  cpu.angle += (2 * Math.PI * r) / 360;
+  cpu.angle = cpu.angle % (2 * Math.PI);
 });
 
 newBuiltin("l", "rotate ccw, <x>", (cpu) => {
   const r = cpu.popNumber();
-  cpu.pen.dir -= (2 * Math.PI * r) / 360;
-  cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
+  cpu.angle -= (2 * Math.PI * r) / 360;
+  cpu.angle = cpu.angle % (2 * Math.PI);
 });
 
 newBuiltin("c", "do-n <f>, <n>", (cpu) => {
   const [block, count] = [cpu.pop(), cpu.popNumber()];
-  console.log("do-n", count, block);
   for (let i = 0; i < count; i++) {
     cpu.evaluate(block.value);
   }
