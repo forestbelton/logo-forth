@@ -1,12 +1,15 @@
-const canvas = document.getElementById("canvas");
+const [canvas, input, commandList, execute] = [
+  "canvas",
+  "input",
+  "command-list",
+  "execute",
+].map((id) => document.getElementById(id));
 const ctx = canvas.getContext("2d");
-const input = document.getElementById("input");
-const commandList = document.getElementById("command-list");
 
 const CANVAS_WIDTH = canvas.width;
 const CANVAS_HEIGHT = canvas.height;
 
-document.getElementById("execute").addEventListener("click", (ev) => {
+const executeInput = () => {
   const cpu = new CPU();
   try {
     const code = input.value;
@@ -20,7 +23,7 @@ document.getElementById("execute").addEventListener("click", (ev) => {
     console.error(e);
     throw e;
   }
-});
+};
 
 class CPU {
   constructor() {
@@ -36,14 +39,12 @@ class CPU {
 
   evaluate(block) {
     block.forEach((token) => {
-      console.log(this.pen.x, this.pen.y, this.pen.dir, this.pen.down);
       this.evaluateToken(token);
     });
   }
 
   evaluateToken(token) {
     token = this.resolveConstant(token);
-    console.log(this.stack.length, token);
     if (token.type === "func") {
       token.value(this);
       return;
@@ -173,7 +174,6 @@ newBuiltin("r", "rotate cw <x>", (cpu) => {
 
 newBuiltin("l", "rotate ccw <x>", (cpu) => {
   const r = cpu.popNumber();
-  console.log("rotate left", r);
   cpu.pen.dir -= (2 * Math.PI * r) / 360;
   cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
 });
@@ -257,3 +257,20 @@ newBuiltin(":", "define <x>, <n>", (cpu) => {
   li.innerText = `${name} = ${BUILTINS_DICT[name].desc}`;
   commandList.appendChild(li);
 });
+
+input.textContent = `d
+90 l
+[ . 0 i 1 - 45 * r 1 i 20 * 50 + f ] F :
+[ 5 3 3 12 13 2 12 ] I :
+F I e
+F 0 !
+F I e`;
+
+execute.addEventListener("click", executeInput);
+execute.click();
+
+input.setSelectionRange(
+  input.textContent.length - 1,
+  input.textContent.length - 1
+);
+input.focus();
