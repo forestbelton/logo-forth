@@ -61,6 +61,14 @@ class CPU {
     }
   }
 
+  resolveNumber(T) {
+    if (T.type !== "constant") {
+      return null;
+    }
+
+    return typeof T.value === "number" ? T.value : parseFloat(T.value);
+  }
+
   resolveConstant(T) {
     if (T.type !== "constant") {
       return T;
@@ -78,8 +86,7 @@ class CPU {
   }
 
   popNumber() {
-    const head = this.pop();
-    return typeof head.value === "number" ? head.value : parseFloat(head.value);
+    return this.resolveNumber(this.pop());
   }
 
   push(type, value) {
@@ -135,9 +142,27 @@ newBuiltin("*", "mul <x>, <y>", (cpu) => {
   cpu.push(C(a * b));
 });
 
-newBuiltin("+", "sum <x>, <y>", (cpu) => {
-  const [a, b] = [cpu.popNumber(), cpu.popNumber()];
-  cpu.push(C(a + b));
+newBuiltin("+", "add <x>, <y>", (cpu) => {
+  const [b, a] = [cpu.pop(), cpu.pop()];
+
+  let value = null;
+
+  if (a.type === "block" && b.type === "constant") {
+    value = B([...a.value, b]);
+  } else if (a.type === "constant" && b.type === "block") {
+    value = B([a, ...b.value]);
+  } else if (a.type === "block" && b.type === "block") {
+    value = B([...a.value, ...b.value]);
+  } else if (a.type === "constant" && b.type === "constant") {
+    const ax = cpu.resolveNumber(a);
+    const bx = cpu.resolveNumber(b);
+    value = C(ax + bx);
+  }
+
+  if (value === null) {
+    throw `cannot add <${a.type}>, <${b.type}>`;
+  }
+  cpu.push(value);
 });
 
 newBuiltin("-", "subtract <x>, <y>", (cpu) => {
@@ -219,8 +244,7 @@ newBuiltin("z", "zip <xs>, <ys>", (cpu) => {
 });
 
 newBuiltin("x", "expand <xs>", (cpu) => {
-  const list = cpu.pop().value;
-  list.forEach((item) => {
+  cpu.pop().value.forEach((item) => {
     cpu.push(item);
   });
 });
