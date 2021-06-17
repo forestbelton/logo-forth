@@ -51,12 +51,22 @@ class CPU {
     this.push(token);
   }
 
+  invoke(T) {
+    if (T.type === "func") {
+      T.value(this);
+    } else if (T.type === "block") {
+      this.evaluate(T.value);
+    } else {
+      throw `cannot invoke ${T.type}`;
+    }
+  }
+
   resolveConstant(T) {
     if (T.type !== "constant") {
       return T;
     }
     if (typeof BUILTINS_DICT[T.value] !== "undefined") {
-      T = T("func", BUILTINS_DICT[T.value]);
+      T = BUILTINS_DICT[T.value];
     } else if (typeof this.dict[T.value] !== "undefined") {
       T = this.dict[T.value];
     }
@@ -115,9 +125,10 @@ const T = (type, value) => ({ type, value });
 const C = (value) => ({ type: "constant", value });
 
 const BUILTINS_DICT = {};
+const BUILTINS_DESC = {};
 const newBuiltin = (name, desc, defn) => {
-  const value = typeof defn === "function" ? T("func", defn) : defn;
-  BUILTINS_DICT[name] = { name, desc, value };
+  BUILTINS_DICT[name] = typeof defn === "function" ? T("func", defn) : defn;
+  BUILTINS_DESC[name] = desc;
 };
 
 newBuiltin("*", "mul <x>, <y>", (cpu) => {
@@ -216,19 +227,12 @@ newBuiltin("x", "expand <xs>", (cpu) => {
 });
 
 newBuiltin(".", "duplicate <x>", (cpu) => {
-  const x = cpu.pop();
-  cpu.push(x);
-  cpu.push(x);
+  cpu.push(cpu.stack[cpu.stack.length - 1]);
 });
 
-newBuiltin("!", "eval <f>, <x>", (cpu) => {
-  const [x, f] = [cpu.pop(), cpu.pop()];
-  cpu.push(x);
-  if (f.type === "func") {
-    f.value(cpu);
-  } else if (f.type === "block") {
-    cpu.evaluate(f.value);
-  }
+newBuiltin("!", "eval <f>", (cpu) => {
+  const f = cpu.pop();
+  cpu.invoke(f);
 });
 
 newBuiltin("i", "index <xs>, <i>", (cpu) => {
@@ -251,6 +255,17 @@ newBuiltin("i", "index <xs>, <i>", (cpu) => {
   }
 });
 
+newBuiltin("?", "if-else <t>, <f>, <p>", (cpu) => {
+  const p = cpu.pop();
+  if (p.type === "constant") {
+    cpu.push(p);
+  } else {
+    cpu.invoke(p);
+  }
+  const [cond, f, t] = [cpu.pop(), cpu.pop(), cpu.pop()];
+  cpu.invoke(cond.type === "constant" && cond.value ? t : f);
+});
+
 newBuiltin(":", "define <x>, <n>", (cpu) => {
   const [name, value] = [cpu.pop(), cpu.pop()];
   cpu.dict[name.value] = value;
@@ -258,16 +273,16 @@ newBuiltin(":", "define <x>, <n>", (cpu) => {
 
 [...Object.keys(BUILTINS_DICT)].sort().forEach((name) => {
   const li = document.createElement("li");
-  li.innerText = `${name} = ${BUILTINS_DICT[name].desc}`;
+  li.innerText = `${name} = ${BUILTINS_DESC[name]}`;
   commandList.appendChild(li);
 });
 
 const DEFAULT_PRGM = `d
 90 l
-[ . 0 i 1 - 45 * r 1 i 20 * 50 + f ] F :
-[ 5 3 3 12 13 2 12 ] I :
+[ . 0 i 1 - 45 * r 1 i 10 * f ] F :
+[ 55 53 53 72 73 52 72 ] I :
 F I e
-F 0 !
+50 F !
 F I e`;
 
 const params = new URLSearchParams(window.location.search);
