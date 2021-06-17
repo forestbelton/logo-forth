@@ -1,35 +1,85 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const input = document.getElementById("input");
+const commandList = document.getElementById("command-list");
 
 const CANVAS_WIDTH = canvas.width;
 const CANVAS_HEIGHT = canvas.height;
 
 document.getElementById("execute").addEventListener("click", (ev) => {
-  const pen = { x: CANVAS_WIDTH / 2, y: CANVAS_WIDTH / 2, dir: 0, down: false };
-  const stack = [];
-
+  const cpu = new CPU();
   try {
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     const code = input.value;
     const tokens = parse(code);
-    eval_prgm(tokens, pen, stack);
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    cpu.evaluate(tokens);
     ctx.beginPath();
-    ctx.arc(pen.x, pen.y, 3, 0, 2 * Math.PI);
+    ctx.arc(cpu.pen.x, cpu.pen.y, 3, 0, 2 * Math.PI);
     ctx.fill();
   } catch (e) {
     console.error(e);
+    throw e;
   }
 });
 
-const eval_prgm = (tokens, pen, stack) =>
-  tokens.forEach((token) => {
+class CPU {
+  constructor() {
+    this.pen = {
+      x: CANVAS_WIDTH / 2,
+      y: CANVAS_WIDTH / 2,
+      dir: 0,
+      down: false,
+    };
+    this.stack = [];
+    this.dict = {};
+  }
+
+  evaluate(block) {
+    block.forEach((token) => {
+      console.log(this.pen.x, this.pen.y, this.pen.dir, this.pen.down);
+      this.evaluateToken(token);
+    });
+  }
+
+  evaluateToken(token) {
+    token = this.resolveConstant(token);
+    console.log(this.stack.length, token);
     if (token.type === "func") {
-      token.value(pen, stack);
+      token.value(this);
       return;
     }
-    stack.push(token);
-  });
+    this.push(token);
+  }
+
+  resolveConstant(T) {
+    if (T.type !== "constant") {
+      return T;
+    }
+    if (typeof BUILTINS_DICT[T.value] !== "undefined") {
+      T = T("func", BUILTINS_DICT[T.value]);
+    } else if (typeof this.dict[T.value] !== "undefined") {
+      T = this.dict[T.value];
+    }
+    return T;
+  }
+
+  pop() {
+    return this.resolveConstant(this.stack.pop());
+  }
+
+  popNumber() {
+    const head = this.pop();
+    return typeof head.value === "number" ? head.value : parseFloat(head.value);
+  }
+
+  push(type, value) {
+    if (typeof value === "undefined") {
+      this.stack.push(type);
+      return;
+    }
+    this.stack.push({ type, value });
+  }
+}
 
 const parse = (str) => {
   const raw_tokens = str
@@ -46,7 +96,7 @@ const parse_it = (raw_tokens, idx0, tokens) => {
   while (idx < raw_tokens.length) {
     const raw = raw_tokens[idx++];
     if (typeof BUILTINS_DICT[raw] !== "undefined") {
-      tokens.push(T("func", BUILTINS_DICT[raw]));
+      tokens.push(T("func", BUILTINS_DICT[raw].code));
       continue;
     } else if (raw === "[") {
       const block = [];
@@ -63,152 +113,147 @@ const parse_it = (raw_tokens, idx0, tokens) => {
 
 const T = (type, value) => ({ type, value });
 
-const popNumber = (stack) => {
-  const raw = stack.pop().value;
-  return typeof raw === "string" ? parseFloat(raw) : raw;
+const BUILTINS_DICT = {};
+const newBuiltin = (name, desc, code) => {
+  BUILTINS_DICT[name] = { name, desc, code };
 };
 
-const multiply = (pen, stack) => {
-  const a = popNumber(stack);
-  const b = popNumber(stack);
-  stack.push(T("constant", a * b));
-};
+newBuiltin("*", "mul <x>, <y>", (cpu) => {
+  const [a, b] = [cpu.popNumber(), cpu.popNumber()];
+  cpu.push("constant", a * b);
+});
 
-const sum = (pen, stack) => {
-  const a = popNumber(stack);
-  const b = popNumber(stack);
-  stack.push(T("constant", a + b));
-};
+newBuiltin("+", "sum <x>, <y>", (cpu) => {
+  const [a, b] = [cpu.popNumber(), cpu.popNumber()];
+  cpu.push("constant", a + b);
+});
 
-const subtract = (pen, stack) => {
-  const a = popNumber(stack);
-  const b = popNumber(stack);
-  stack.push(T("constant", a - b));
-};
+newBuiltin("-", "subtract <x>, <y>", (cpu) => {
+  const [a, b] = [cpu.popNumber(), cpu.popNumber()];
+  cpu.push("constant", a - b);
+});
 
-const backward = (pen, stack) => {
-  const d = popNumber(stack);
-  const { x, y } = pen;
-  pen.x = pen.x - Math.cos(pen.dir) * d;
-  pen.y = pen.y - Math.sin(pen.dir) * d;
-  if (!pen.down) {
+newBuiltin("b", "back <x>", (cpu) => {
+  const d = cpu.popNumber();
+  const { x, y } = cpu.pen;
+  cpu.pen.x = cpu.pen.x - Math.cos(cpu.pen.dir) * d;
+  cpu.pen.y = cpu.pen.y - Math.sin(cpu.pen.dir) * d;
+  if (!cpu.pen.down) {
     return;
   }
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(pen.x, pen.y);
+  ctx.lineTo(cpu.pen.x, cpu.pen.y);
   ctx.stroke();
-};
+});
 
-const forward = (pen, stack) => {
-  const d = popNumber(stack);
-  const { x, y } = pen;
-  pen.x = pen.x + Math.cos(pen.dir) * d;
-  pen.y = pen.y + Math.sin(pen.dir) * d;
-  if (!pen.down) {
+newBuiltin("f", "forward <x>", (cpu) => {
+  const d = cpu.popNumber();
+  const { x, y } = cpu.pen;
+  cpu.pen.x += Math.cos(cpu.pen.dir) * d;
+  cpu.pen.y += Math.sin(cpu.pen.dir) * d;
+  if (!cpu.pen.down) {
     return;
   }
   ctx.beginPath();
   ctx.moveTo(x, y);
-  ctx.lineTo(pen.x, pen.y);
+  ctx.lineTo(cpu.pen.x, cpu.pen.y);
   ctx.stroke();
-};
+});
 
-const pendown = (pen, stack) => {
-  pen.down = true;
-};
+newBuiltin("d", "pen down", (cpu) => (cpu.pen.down = true));
 
-const penup = (pen, stack) => {
-  pen.down = false;
-};
+newBuiltin("u", "pen up", (cpu) => (cpu.pen.up = true));
 
-const rotateright = (pen, stack) => {
-  const r = popNumber(stack);
-  pen.dir += (2 * Math.PI * r) / 360;
-  pen.dir = pen.dir % (2 * Math.PI);
-};
+newBuiltin("r", "rotate cw <x>", (cpu) => {
+  const r = cpu.popNumber();
+  cpu.pen.dir += (2 * Math.PI * r) / 360;
+  cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
+});
 
-const rotateleft = (pen, stack) => {
-  const r = popNumber(stack);
-  pen.dir -= (2 * Math.PI * r) / 360;
-  pen.dir = pen.dir % (2 * Math.PI);
-};
+newBuiltin("l", "rotate ccw <x>", (cpu) => {
+  const r = cpu.popNumber();
+  console.log("rotate left", r);
+  cpu.pen.dir -= (2 * Math.PI * r) / 360;
+  cpu.pen.dir = cpu.pen.dir % (2 * Math.PI);
+});
 
-const repeat = (pen, stack) => {
-  const block = stack.pop();
-  const count = popNumber(stack);
+newBuiltin("c", "do-n <f> <n>", (cpu) => {
+  const [block, count] = [cpu.pop(), cpu.popNumber()];
+  console.log("do-n", count, block);
   for (let i = 0; i < count; i++) {
-    eval_prgm(block.value, pen, stack);
+    cpu.evaluate(block.value);
   }
-};
+});
 
-const each = (pen, stack) => {
-  const items = stack.pop();
-  const block = stack.pop();
+newBuiltin("e", "each <f> <xs>", (cpu) => {
+  const [items, block] = [cpu.pop(), cpu.pop()];
   items.value.forEach((item) => {
-    stack.push(item);
-    eval_prgm(block.value, pen, stack);
+    cpu.push(item);
+    cpu.evaluate(block.value);
   });
-};
+});
 
-const zip = (pen, stack) => {
-  const list2 = stack.pop().value;
-  const list1 = stack.pop().value;
+newBuiltin("z", "zip <xs> <ys>", (cpu) => {
+  const list2 = cpu.pop().value;
+  const list1 = cpu.pop().value;
   const items = [];
   for (let i = 0; i < Math.min(list1.length, list2.length); i++) {
     items.push(T("block", [list1[i], list2[i]]));
   }
-  stack.push(T("block", items));
-};
+  cpu.push("block", items);
+});
 
-const expand = (pen, stack) => {
-  const list = stack.pop().value;
+newBuiltin("x", "expand <xs>", (cpu) => {
+  const list = cpu.pop().value;
   list.forEach((item) => {
-    stack.push(item);
+    cpu.push(item);
   });
-};
+});
 
-const duplicate = (pen, stack) => {
-  const item = stack.pop();
-  stack.push(item);
-  stack.push(item);
-};
+newBuiltin(".", "duplicate <x>", (cpu) => {
+  const x = cpu.pop();
+  cpu.push(x);
+  cpu.push(x);
+});
 
-const index = (pen, stack) => {
-  const i = popNumber(stack);
-  const item = stack.pop();
+newBuiltin("!", "eval <f> <x>", (cpu) => {
+  const [x, f] = [cpu.pop(), cpu.pop()];
+  cpu.push(x);
+  if (f.type === "func") {
+    f.value(cpu);
+  } else if (f.type === "block") {
+    cpu.evaluate(f.value);
+  }
+});
+
+newBuiltin("i", "index <xs>, <i>", (cpu) => {
+  const [i, xs] = [cpu.popNumber(), cpu.pop()];
   let value = null;
-  if (item.type === "block") {
-    value = item.value[Math.floor(i)];
-  } else if (item.type === "constant") {
+  if (xs.type === "block") {
+    value = xs.value[Math.floor(i)];
+  } else if (xs.type === "constant") {
     try {
-      const number = Math.floor(parseFloat(item.value)).toString();
+      const number = Math.floor(parseFloat(xs.value)).toString();
       const digitIndex = number.length - Math.floor(i) - 1;
       value = T("constant", digitIndex >= 0 ? number.charAt(digitIndex) : "0");
     } catch (e) {
       console.error(e);
-      value = item;
+      value = xs;
     }
   }
   if (value !== null) {
-    stack.push(value);
+    cpu.push(value);
   }
-};
+});
 
-const BUILTINS_DICT = {
-  "*": multiply,
-  "+": sum,
-  "-": subtract,
-  ".": duplicate,
-  b: backward,
-  e: each,
-  i: index,
-  f: forward,
-  l: rotateleft,
-  d: pendown,
-  n: repeat,
-  r: rotateright,
-  z: zip,
-  u: penup,
-  x: expand,
-};
+newBuiltin(":", "define <x>, <n>", (cpu) => {
+  const [name, value] = [cpu.pop(), cpu.pop()];
+  cpu.dict[name.value] = value;
+});
+
+[...Object.keys(BUILTINS_DICT)].sort().forEach((name) => {
+  const li = document.createElement("li");
+  li.innerText = `${name} = ${BUILTINS_DICT[name].desc}`;
+  commandList.appendChild(li);
+});
