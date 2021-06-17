@@ -1,6 +1,19 @@
 h1 {
   text-align: center;
-  margin-bottom: 2rem;
+}
+
+#command-list {
+  display: flex;
+  flex-wrap: wrap;
+  list-style-type: none;
+  margin: 2rem 0;
+  padding: 0;
+}
+
+#command-list > li {
+  display: inline-block;
+  font-family: Monaco, Consolas, Inconsolata, "Courier New", Courier, monospace;
+  width: 25%;
 }
 
 #root {
