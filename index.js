@@ -300,13 +300,12 @@ newBuiltin(":", "define <x>, <n>", (cpu) => {
   commandList.appendChild(li);
 });
 
-const DEFAULT_PRGM = `d
-90 l
-[ . 0 i 1 - 45 * r 1 i 10 * f ] F :
-[ 55 53 53 72 73 52 72 ] I :
-F I e
-50 F !
-F I e`;
+const DEFAULT_PRGM = `90 l
+100 f
+d
+[ . 0 i 1 - 45 * r 1 i 10 * f ]
+[ 55 53 53 72 73 52 72 ] I : I 50 + I +
+e`;
 
 const params = new URLSearchParams(window.location.search);
 input.textContent =
